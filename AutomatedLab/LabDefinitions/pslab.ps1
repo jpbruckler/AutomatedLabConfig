@@ -28,8 +28,9 @@ $PSDefaultParameterValues = @{
 }
 
 #endregion
-Add-LabDiskDefinition -Name psu_datadisk -DiskSizeInGb 100 -Label Apps -DriveLetter D -AllocationUnitSize 64kb
+#Add-LabDiskDefinition -Name psu_datadisk -DiskSizeInGb 100 -Label Apps -DriveLetter D -AllocationUnitSize 64kb
 Add-LabDiskDefinition -Name psu_datadisk1 -DiskSizeInGb 100 -Label Apps -DriveLetter D -AllocationUnitSize 64kb
+
 $machineDefinitions = @(
     @{
         Name            = 'svr-lab-rootca'
@@ -60,20 +61,17 @@ $machineDefinitions = @(
         Name            = 'svr-lab-wac01'
         IpAddress       = '172.17.112.100'
         Processors      = 2
-        #Roles           = Get-LabMachineRoleDefinition -Role WindowsAdminCenter -Properties @{ 
-        #    Port = '6516';
-        #    UseSsl = 'generated' 
-        #}
+        Roles           = Get-LabMachineRoleDefinition -Role WindowsAdminCenter
         OperatingSystem = 'Windows Server 2022 Datacenter (Desktop Experience)'
     },
-    @{
-        Name            = 'svr-lab-psu01'
-        IpAddress       = '172.17.112.101'
-        Memory          = 4gb
-        MaxMemory       = 8gb
-        Processors      = 4
-        DiskName        = 'psu_datadisk'
-    },
+    # @{
+    #     Name            = 'svr-lab-psu01'
+    #     IpAddress       = '172.17.112.101'
+    #     Memory          = 4gb
+    #     MaxMemory       = 8gb
+    #     Processors      = 4
+    #     DiskName        = 'psu_datadisk'
+    # },
     @{
         Name            = 'svr-lab-psu02'
         IpAddress       = '172.17.112.102'
@@ -81,6 +79,14 @@ $machineDefinitions = @(
         MaxMemory       = 4gb
         Processors      = 2
         DiskName        = 'psu_datadisk1'
+        PostInstallationActivity = (
+            Get-LabPostInstallationActivity -CustomRole PowerShellUniversal -Properties @{ 
+                ComputerName = 'svr-lab-psu02'
+                REPOFOLDER = 'D:\UniversalAutomation\Repository'
+                CONNECTIONSTRING = 'Data Source=D:\UniversalAutomation\database.db'
+                SERVICEACCOUNT = [pscredential]::new('lab\svc-ims', (ConvertTo-SecureString $DefaultPass -AsPlainText -Force))
+            }
+        )
     }
 )
 
@@ -89,29 +95,46 @@ foreach ($Definition in $MachineDefinitions) {
 }
 
 Install-Lab -NetworkSwitches -BaseImages -VMs
-Install-Lab -Domains
-Install-Lab -Routing
-Enable-LabInternalRouting -RoutingNetworkName PSLabInternalVSwitch
-Install-Lab -CA
-Enable-LabCertificateAutoenrollment -Computer -User -CodeSigning 
+
+$LabVMs = Get-LabVM
+$definedDCs = ($machineDefinitions | Where-Object { $_.Roles.Name -like '*DC' }).Name
+$deployedDCs = ($LabVMs | Where-Object { $_.Roles.Name -like '*DC' }).Name
+
+# if no lab vms or not enough DCs deployed
+if ($null -eq $LabVMs -or ($definedDCs | Where-Object { $_ -notin $deployedDCs })) {
+    Install-Lab -Domains
+}
+
+# if no lab vms or no router
+if ($null -eq $LabVMs -or (-not ($LabVMs | Where-Object { $_.Roles.Name -eq 'Routing'}))) {
+    Install-Lab -Routing
+    Enable-LabInternalRouting -RoutingNetworkName PSLabInternalVSwitch
+}
+
+# If no lab vms, or no root ca
+if ($null -eq $LabVMs -or (-not ($LabVMs | Where-Object { $_.Roles.Name -eq 'CaRoot'}))) {
+    Install-Lab -CA
+    Enable-LabCertificateAutoenrollment -Computer -User -CodeSigning 
+}
 
 Invoke-LabCommand -ActivityName 'Publish WebServer Certificate' -ComputerName svr-lab-rootca -ScriptBlock {
-    Publish-CaTemplate -TemplateName 'WebServer'
-    dsacls "CN=WebServer,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$DomainName" /G 'Domain Users:GR'
-    dsacls "CN=WebServer,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$DomainName" /G 'Domain Users:CA;Enroll'
-}
+    $tplExists = Get-CaTemplate -TemplateName 'WebServer'
+    if ($null -eq $tplExists) {
+        Publish-CaTemplate -TemplateName 'WebServer'
+        dsacls "CN=WebServer,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$DomainName" /G 'Domain Users:GR'
+        dsacls "CN=WebServer,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$DomainName" /G 'Domain Users:CA;Enroll'
+    }
+} -Variable (Get-Variable -Name DomainName)
 
 Install-Lab -StartRemainingMachines
 
 Enable-LabVMRemoting -All
 
 # Install Software on all machines
-$LabVMs = Get-LabVM | Select-Object -ExpandProperty Name | Where-Object { $_ -notlike 'rtr*' }
+$LabVMs = Get-LabVM | Select-Object -ExpandProperty Name
 $LabVMs | ForEach-Object { 
     # Create log directory
     Invoke-LabCommand -ActivityName "Create C:\Temp" -ComputerName $_ -ScriptBlock { New-Item -ItemType Directory -Path C:\Temp -force }
-    Invoke-LabCommand -ActivityName "Trust PSGallery" -ComputerName $_ -ScriptBlock { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted }
-    Invoke-LabCommand -ActivityName "Install Modules" -ComputerName $_ -ScriptBlock { Install-Module carbon -Force }
 
     # Install Chocolatey
     $sb = { 
@@ -120,7 +143,7 @@ $LabVMs | ForEach-Object {
         iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
     }
     Invoke-LabCommand -ActivityName "Install Chocolatey" -ComputerName $_ -ScriptBlock $sb
-
+    Restart-LabVM -ComputerName $_ -Wait
     # Install chocolatey packages
     $packageNames = @(
         'powershell-core',
@@ -128,31 +151,42 @@ $LabVMs | ForEach-Object {
         'vscode'
     )
     foreach ($package in $packageNames) { 
-        Invoke-LabCommand -ActivityName "Install $package" -ComputerName $_ -ScriptBlock { Start-Process 'C:\ProgramData\chocolatey\choco.exe' -ArgumentList "install $package -y" }
+        $chocoPkg = $package
+        Invoke-LabCommand -ActivityName "Install $package" -ComputerName $_ -ScriptBlock { choco.exe install $chocoPkg -y } -PassThru -Variable (Get-Variable -name chocoPkg)
     }
+
+    Restart-LabVM -ComputerName $_ -Wait
+    Invoke-LabCommand -ComputerName $_ -ActivityName 'Enable PowerShell 7 Remoting' -ScriptBlock { start-process 'C:\Program Files\PowerShell\7\pwsh.exe' -ArgumentList '{ Enable-PSRemoting -Force -SkipNetworkProfileCheck }'}
 } 
 
 # Specific Machines
 #region svr-lab-dc01
-Invoke-LabCommand -ActivityName "Create lab OU" -ComputerName svr-lab-dc01 -ScriptBlock { New-ADOrganizationalUnit -Name 'lab' -Path 'DC=lab,DC=local' }
-Invoke-LabCommand -ActivityName "Create svc-ims user" -ComputerName svr-lab-dc01 -ScriptBlock { New-ADUser -Name 'svc-ims' -AccountPassword (ConvertTo-SecureString $DefaultPass -AsPlainText -Force) -Enabled $true -Path 'OU=lab,DC=lab,DC=local' }
-
+Invoke-LabCommand -ActivityName "Create lab OU" -ComputerName svr-lab-dc01 -ScriptBlock { 
+    if ($null -eq (Get-ADOrganizationalUnit -Filter "Name -eq 'lab'")) {
+        New-ADOrganizationalUnit -Name 'lab' -Path 'DC=lab,DC=local' -ErrorAction SilentlyContinue 
+    }
+}
+Invoke-LabCommand -ActivityName "Create svc-ims user" -ComputerName svr-lab-dc01 -ScriptBlock { 
+    if (-not (Get-AdUser -Filter "SamAccountName -eq 'svc-ims'" -ErrorAction SilentlyContinue)) {
+        New-ADUser -Name 'svc-ims' -AccountPassword (ConvertTo-SecureString $DefaultPass -AsPlainText -Force) -Enabled $true -Path 'OU=lab,DC=lab,DC=local' 
+    }
+} -Variable (Get-Variable -Name DefaultPass)
+#endregion
 
 #region svr-lab-wac01
-$cert = Get-LabCertificate -Computer svr-lab-wac01 -SearchString svr-lab-wac01 -FindType FindBySubjectName -Location CERT_SYSTEM_STORE_LOCAL_MACHINE -Store My
+$cert = Get-LabCertificate -Computer svr-lab-wac01 -SearchString svr-lab-wac01 -FindType FindBySubjectName -Location CERT_SYSTEM_STORE_LOCAL_MACHINE -Store My -ErrorAction SilentlyContinue
 if ($null -eq $cert) {
-    Request-LabCertificate -Subject 'CN=svr-lab-psu01' -SAN 'svr-lab-psu01.lab.local' -TemplateName WebServer -ComputerName svr-lab-psu01
+    $cert = Request-LabCertificate -Subject 'CN=svr-lab-psu01' -SAN 'svr-lab-psu01.lab.local' -TemplateName WebServer -ComputerName svr-lab-psu01
 }
-else {
-    # Set to null for next computer
-    $cert = $null
-}
-Install-LabWindowsFeature -FeatureName RSAT -ComputerName svr-lab-wac01 -IncludeAllSubFeature -IncludeManagementTools
+
+#Install-LabWindowsFeature -FeatureName RSAT -ComputerName svr-lab-wac01 -IncludeAllSubFeature -IncludeManagementTools
+#Wait-LabVMRestart -ComputerName 'svr-lab-wac01'
+Get-LabInternetFile -Uri https://aka.ms/wacdownload -Path C:\LabSources\SoftwarePackages\ -FileName wacinstall.msi -Verbose -force
 # Setup Windows Admin Center
-$ThumbPrint = Invoke-LabCommand -ComputerName svr-lab-wac01 -ScriptBlock { Get-ChildItem cert:\localmachine\my | Select-Object -ExpandProperty Thumbprint } -PassThru
+
 $InstallArgs = @("/qn", "/l*v", "C:\temp\wac_install.log", "SME_PORT=6516")
 if ($ThumbPrint) {
-    $InstallArgs += "SME_THUMBPRINT=$ThumbPrint"
+    $InstallArgs += "SME_THUMBPRINT=$($cert.Thumbprint)"
     $InstallArgs += "SSL_CERTIFICATE_OPTION=installed"
 } else {
     $InstallArgs += "SSL_CERTIFICATE_OPTION=generate"
@@ -160,128 +194,27 @@ if ($ThumbPrint) {
 Install-LabSoftwarePackage -Path $labSources\SoftwarePackages\wacinstall.msi -CommandLine ($InstallArgs -join ' ') -ComputerName svr-lab-wac01
 #endregion
 
-
-#region svr-lab-psu01
-$cert = Get-LabCertificate -Computer svr-lab-wac01 -SearchString svr-lab-wac01 -FindType FindBySubjectName -Location CERT_SYSTEM_STORE_LOCAL_MACHINE -Store My
-if ($null -eq $cert) {
-    Request-LabCertificate -Subject 'CN=svr-lab-wac01' -SAN 'svr-lab-wac01.lab.local' -TemplateName WebServer -ComputerName svr-lab-wac01
-}
-else {
-    # Set to null for next computer
-    $cert = $null
-}
-Install-LabWindowsFeature -FeatureName RSAT -ComputerName svr-lab-psu01 -IncludeAllSubFeature -IncludeManagementTools
-# Setup PowerShellUniversal 4
-$ThumbPrint = $null
-$ThumbPrint = Invoke-LabCommand -ComputerName svr-lab-psu01 -ScriptBlock { Get-ChildItem cert:\localmachine\my | Select-Object -ExpandProperty Thumbprint } -PassThru
- svr-lab-psu01
-#endregion
-
-#region PowerShellUniversal Servers
-$vms = Get-LabVM | Where-Object { $_.Name -like 'svr-lab-psu0*' }
-foreach ($vm in $vms) {
-    $svc = Invoke-LabCommand -ActivityName 'Check PowerShell Universal Service' -ComputerName $vm.Name -ScriptBlock { Get-Service -Name 'PowerShellUniversal' } -PassThru
-    if ($svc) {
-        continue
-    }
-    # Privelges needed by the service account
-    $Privileges = @(
-        'SeServiceLogonRight', 
-        'SeIncreaseWorkingSetPrivilege', 
-        'SeAssignPrimaryTokenPrivilege'
-    )
-
-    foreach ($Privilege in $Privileges) {
-        Invoke-LabCommand -ActivityName "Add $Privilege" -ComputerName $($vm.Name) -ScriptBlock { 
-            Grant-CPrivilege -Identity 'lab\svc-ims' -Privilege $Using:Privilege
-        }
-    }
-
-    $Cert = Get-LabCertificate -ComputerName svr-lab-psu02 -FindType FindByTemplateName -SearchString WebServer -Location CERT_SYSTEM_STORE_LOCAL_MACHINE -Store My
-    if ($null -eq $Cert) {
-        $Cert = Request-LabCertificate -Subject "CN=$($vm.Name)" -SAN "$($vm.Name).lab.local" -TemplateName WebServer -ComputerName $vm.Name -PassThru
-    }
-    else {
-        # Set to null for next computer
-        $Cert = $null
-    }
-
-    Invoke-LabCommand -ActivityName 'Grant service account permissions to SSL certificate' -ComputerName $vm.Name -ScriptBlock { 
-        $Cert = Get-ChildItem cert:\localmachine\my | Where-Object { $_.Subject -eq "CN=$($Using:vm.Name)" }
-        $path = "cert:\{0}" -f ($Cert.PSPath.split('::',2)[1])
-        Grant-CPermission -Identity 'lab\svc-ims' -Permission Read -Path $path -Type Allow
-        Add-CGroupMember -Name 'Performance Log Users' -Member lab\svc-ims
-        Add-CGroupMember -Name 'Performance Monitor Users' -Member lab\svc-ims
-    }
-
-    # Install PowerShellUniversal
-    Invoke-LabCommand -ActivityName "Create D:\UniveralAutomation" -ComputerName svr-lab-psu01 -ScriptBlock { New-Item -ItemType Directory -Path D:\UniversalAutomation -force }
-    $InstallArgs = @(
-        "/qn", 
-        "/l*v", 
-        "C:\temp\psu_install.log",
-        "REPOFOLDER=D:\UniversalAutomation\Repository",
-        'CONNECTIONSTRING="Data Source=D:\UniversalAutomation\database.db"'
-    )
-    # psu01 is v4, psu02 is v5
-    $packagePath = if ($vm.Name -eq 'svr-lab-psu01') {
-            Join-Path $labSources 'SoftwarePackages\PowerShellUniversalServer.4.3.4.msi'
-        }
-        else {
-            Join-Path $labSources 'SoftwarePackages\PowerShellUniversal.5.0.4.msi'
-        }
-    Install-LabSoftwarePackage -Path $packagePath -CommandLine ($InstallArgs -join ' ') -ComputerName $vm.Name
-
-    $appSettings =@"
-{
-  "Kestrel": {
-    "Endpoints": {
-      "HTTP": {
-        "Url": "http://*:5000"
-      },
-      "HTTPS": {
-        "Url": "https://*:443",
-        "Certificate": {
-          "StoreName": "My",
-          "Location": "LocalMachine",
-          "Subject": "{{servername}}",
-          "AllowInvalid": true
-        }
-      }
-    }
-  },
-  "Plugins": [
-    "SQLite"
-  ],
-  "Data": {
-    "RepositoryPath": "D:\\UniversalAutomation\\Repository",
-    "ConnectionString": "Data Source=D:\\UniversalAutomation\\database.db"
-  }
-}
-"@  
-    $content = $appSettings -replace '{{servername}}', $vm.Name
-    Invoke-LabCommand -ActivityName "Create PowerShell Universal appsettings.json" -ComputerName $vm.Name -ScriptBlock { 
-        $Using:content | Out-File -FilePath 'C:\ProgramData\PowerShellUniversal\appsettings.json' -Force
-    }
-
-    $Cred = [PSCredential]::new('lab\svc-ims', (ConvertTo-SecureString $DefaultPass -AsPlainText -Force))
-    Invoke-LabCommand -ActivityName 'Set Service Account' -ComputerName $vm.Name -ScriptBlock { 
-        Set-Service -Name 'UniversalAutomation' -StartupType 'Automatic' -Credential $Using:Cred
-    }
-
-    Invoke-LabCommand -ActivityName "Start PowerShell Universal" -ComputerName $vm.Name -ScriptBlock { 
-        Start-Service -Name 'UniversalAutomation'
-    }
-
-    Invoke-LabCommand -ActivityName 'Create Modules Share' -ComputerName $vm.Name -ScriptBlock { 
-        if (-not (Test-Path 'D:\UniversalAutomation\Repository\Modules')) {
-            New-Item -ItemType Directory -Path 'D:\UniversalAutomation\Repository\Modules' -Force
-        }
-        New-SMBShare -Name 'Modules' -Path 'D:\UniversalAutomation\Repository\Modules' -FullAccess Administrators
-    }
+$LabVMs | Where-Object { $_ -like '*psu0*' } | ForEach-Object {
+    Install-LabWindowsFeature -ComputerName $_ -FeatureName RSAT-AD-PowerShell
 }
 
-#endregion
 
+# #region svr-lab-psu01
+# Request-LabCertificate -Subject 'CN=svr-lab-wac01' -SAN 'svr-lab-wac01.lab.local' -TemplateName WebServer -ComputerName svr-lab-wac01
+# Install-LabWindowsFeature -FeatureName RSAT -ComputerName svr-lab-psu01 -IncludeAllSubFeature -IncludeManagementTools
+# # Setup PowerShellUniversal
+# $ThumbPrint = $null
+# $ThumbPrint = Invoke-LabCommand -ComputerName svr-lab-psu01 -ScriptBlock { Get-ChildItem cert:\localmachine\my | Select-Object -ExpandProperty Thumbprint } -PassThru
+# Invoke-LabCommand -ActivityName "Create D:\UniveralAutomation" -ComputerName svr-lab-psu01 -ScriptBlock { New-Item -ItemType Directory -Path D:\UniversalAutomation -force }
+# $InstallArgs = @(
+#     "/qn", 
+#     "/l*v", 
+#     "C:\temp\psu_install.log",
+#     "REPOFOLDER=D:\UniversalAutomation\Repository",
+#     'CONNECTIONSTRING="Data Source=D:\UniversalAutomation\database.db"'
+# )
+# Install-LabSoftwarePackage -Path $labSources\SoftwarePackages\PowerShellUniversalServer.4.3.4.msi -CommandLine ($InstallArgs -join ' ') -ComputerName svr-lab-psu01
+# #endregion
 
+Add-LabWacManagedNode
 Show-LabDeploymentSummary -Detailed
