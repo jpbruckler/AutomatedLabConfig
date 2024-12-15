@@ -83,7 +83,7 @@ $machineDefinitions = @(
     },
     @{
         Name                     = 'svr-lab-wac'
-        IpAddress                = '172.17.112.100'
+        IpAddress                = ('{0}.100' -f $LabRootAddress)
         Processors               = 2
         PostInstallationActivity = Get-LabPostInstallationActivity -CustomRole WindowsAdminCenter -Properties @{ 
             ComputerName = 'svr-lab-wac'
@@ -92,7 +92,7 @@ $machineDefinitions = @(
     },
     @{
         Name                     = 'svr-lab-psu'
-        IpAddress                = '172.17.112.101'
+        IpAddress                = ('{0}.101' -f $LabRootAddress)
         Memory                   = 2gb
         MaxMemory                = 4gb
         Processors               = 2
