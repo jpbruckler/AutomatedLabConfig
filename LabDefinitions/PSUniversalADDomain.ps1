@@ -5,7 +5,7 @@ $labName = "UniversalLab"
 $InstallUser = "Administrator"
 $InstallPass = "L4bP@ssw0rd"
 $DefaultPass = "L4bP@ssw0rd"
-$Domain = "psu.local"
+$DomainName = "psu.local"
 $DefaultServerOS = "Windows Server 2022 Datacenter Evaluation"
 $DefaultDesktpOS = "Windows 11 Enterprise Evaluation"
 $LabAddressSpace = '172.17.110.0/24'
@@ -16,7 +16,7 @@ $LabExternalVSwitch = 'Default Switch'
 # Create the lab definition, set the installation credentials, and add the domain definition.
 New-LabDefinition -Name $labName -DefaultVirtualizationEngine HyperV  -VmPath "C:\AutomatedLab-VMs\$labName"
 Set-LabInstallationCredential -Username $InstallUser -Password $InstallPass
-Add-LabDomainDefinition -Name $Domain -AdminUser $InstallUser -AdminPassword $InstallPass
+Add-LabDomainDefinition -Name $DomainName -AdminUser $InstallUser -AdminPassword $InstallPass
 
 # Define the lab network.
 # - LabInternalVSwitch: Internal virtual switch for the lab network. All lab machines will connect to 
@@ -29,7 +29,7 @@ Add-LabVirtualNetworkDefinition -Name $LabExternalVSwitch -HyperVProperties @{Sw
 # Setup cmdlet default parameter values to simplify the lab definition.
 $PSDefaultParameterValues = @{
     'Add-LabMachineDefinition:ToolsPath'       = "$labSources\Tools"
-    'Add-LabMachineDefinition:DomainName'      = $Domain
+    'Add-LabMachineDefinition:DomainName'      = $DomainName
     'Add-LabMachineDefinition:OperatingSystem' = $DefaultServerOS
     
     # Calculate the gateway address based on the lab address space.
@@ -57,7 +57,7 @@ $PSDefaultParameterValues = @{
 # -----------------------------------------------------------------------------
 Add-LabDiskDefinition -Name psu_datadisk -DiskSizeInGb 100 -Label Apps -DriveLetter D -AllocationUnitSize 64kb
 $machineDefinitions = @(
-    # Domain Controller and RootCA
+    # DomainName Controller and RootCA
     @{
         Name      = 'svr-lab-pdc'
         IpAddress = ('{0}.70' -f $LabRootAddress)
@@ -116,28 +116,34 @@ Install-Lab -Domains
 
 Install-Lab -Routing
 Enable-LabInternalRouting -RoutingNetworkName 'LabInternalVSwitch'
+
 Install-Lab -CA
+Enable-LabCertificateAutoenrollment -Computer -User -CodeSigning
 
 Install-Lab -StartRemainingMachines
 Enable-LabVMRemoting -All
-Enable-LabCertificateAutoenrollment -Computer -User -CodeSigning
+
 
 # =============================================================================
 # Software installs
 # =============================================================================
-Invoke-LabCommand -ActivityName 'Publish WebServer Certificate' -ComputerName svr-lab-rootca -ScriptBlock {
-    Publish-CaTemplate -TemplateName 'WebServer'
-    dsacls "CN=WebServer,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$DomainName" /G 'Domain Users:GR'
-    dsacls "CN=WebServer,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$DomainName" /G 'Domain Users:CA;Enroll'
-}
+$RootCA = Get-LabVM | Where-Object { $_.Roles.Name -like 'CaRoot' }
+$RootDC = Get-LabVM | Where-Object { $_.Roles.Name -like 'RootDC' }
 
-Invoke-LabCommand -ActivityName 'Create lab OU' -ComputerName svr-lab-dc01 -ScriptBlock { 
+Invoke-LabCommand -ActivityName 'Publish WebServer Certificate' -ComputerName $RootCA -ScriptBlock {
+    Publish-CaTemplate -TemplateName 'WebServer'
+    dsacls "CN=WebServer,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$DomainName" /G 'DomainName Users:GR'
+    dsacls "CN=WebServer,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$DomainName" /G 'DomainName Users:CA;Enroll'
+} -Variable (Get-Variable -Name DomainName)
+
+Invoke-LabCommand -ActivityName 'Create lab OU' -ComputerName $RootDC -ScriptBlock { 
+    $Path = Get-ADDomain | Select-Object -ExpandProperty DistinguishedName
     if (-not (Get-ADOrganizationalUnit -Filter { Name -eq 'lab' })) {
-        New-ADOrganizationalUnit -Name 'lab' -Path 'DC=lab,DC=local' 
+        New-ADOrganizationalUnit -Name 'lab' -Path $Path
     }
 }
 
-Invoke-LabCommand -ActivityName 'Create lab users' -ComputerName svr-lab-dc01 -ScriptBlock {
+Invoke-LabCommand -ActivityName 'Create lab users' -ComputerName $RootDC -ScriptBlock {
     $labOU = Get-ADOrganizationalUnit -Filter { Name -eq 'lab' }
     $labUsers = @(
         @{
@@ -182,11 +188,14 @@ $LabVMs | ForEach-Object {
         Install-Module carbon -Force
     }
 
-    # Install PowerShell 7.4.6
-    if (-not (Invoke-LabCommand -ComputerName $_ -ScriptBlock { Get-Command pwsh } -PassThru)) {
-        Install-LabSoftwarePackage -ComputerName $_ -Path "$labSources\SoftwarePackages\PowerShell-7.4.6-win-x64.msi" -CommandLine '/qn /l*v C:\temp\Pwsh_install.log ADD_EXPLORER_CONTEXT_MENU_OPENPOWERSHELL=1 ADD_FILE_CONTEXT_MENU_RUNPOWERSHELL=1 ENABLE_PSREMOTING=1 REGISTER_MANIFEST=1 USE_MU=1 ENABLE_MU=1 ADD_PATH=1'
-        Restart-LabVM -ComputerName $_
+    # Install Latest PowerShell 7
+    $latest = Invoke-RestMethod -Uri 'api.github.com/repos/powershell/powershell/releases/latest'
+    $target = $latest.assets | where-object name -like '*win-x64.msi'
+    if (-not (Test-Path -Path "$labSources\SoftwarePackages\$($target.name)")) {
+        Invoke-WebRequest -Uri $target.browser_download_url -OutFile "$labSources\SoftwarePackages\$($target.name)"
     }
+
+    Install-LabSoftwarePackage -ComputerName $_ -Path "$labSources\SoftwarePackages\$($target.name)" -CommandLine '/qn /l*v C:\temp\Pwsh_install.log ADD_EXPLORER_CONTEXT_MENU_OPENPOWERSHELL=1 ADD_FILE_CONTEXT_MENU_RUNPOWERSHELL=1 ENABLE_PSREMOTING=1 REGISTER_MANIFEST=1 USE_MU=1 ENABLE_MU=1 ADD_PATH=1'
 
     # Add web server certificate
     $cert = Get-LabCertificate -Computer $_ -SearchString $_ -FindType FindBySubjectName -Location CERT_SYSTEM_STORE_LOCAL_MACHINE -Store My
@@ -202,6 +211,6 @@ $LabVMs | ForEach-Object {
     # Install RSAT
     Install-LabWindowsFeature -FeatureName RSAT -ComputerName $_ -IncludeAllSubFeature -IncludeManagementTools
 } 
-
+Get-LabVM | Restart-LabVM -Wait
 Install-Lab -PostInstallations 
 Show-LabDeploymentSummary -Detailed
