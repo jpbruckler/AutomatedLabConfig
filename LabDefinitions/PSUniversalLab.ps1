@@ -1,20 +1,35 @@
 <#
+.SYNOPSIS
+    Deploys a lab for testing with PowerShell Universal, including an Active Directory
+    domain, single-server PKI, and Windows Admin Center.
+.DESCRIPTION
+    Creates a Hyper-V lab infrastructure consisting of the following machines:
+
+    | DomainName             | IpAddress       | Roles                | OperatingSystem                           |
+    | ---------------------- | --------------- | -------------------- | ----------------------------------------- |
+    | svr-lab-pdc.lab.local  | 172.17.112.0/24 | RootDC, CA Root      | Windows Server 2022 Datacenter Evaluation |
+    | svr-lab-rtr.lab.local  | 172.17.0.0/16   | Routing              | Windows Server 2022 Datacenter Evaluation |
+    | svr-lab-wac.lab.local  | 172.17.112.0/24 | Windows Admin Center | Windows Server 2022 Datacenter Evaluation (Desktop Experience) |
+    | svr-lab-psu.lab.local  | 172.17.112.0/24 | PowerShell Universal | Windows Server 2022 Datacenter Evaluation |
+
+    svr-lab-rtr is the gateway device for the lab network. It is connected to the
+    Default Switch, and to the Lab's internal switch. Lab servers are configured
+    to use the PDC as the primary DNS server, with 1.1.1.1 as the secondary.
 #>
 
-$labName = "UniversalLab"
-$InstallUser = "Administrator"
-$InstallPass = "L4bP@ssw0rd"
-$DefaultPass = "L4bP@ssw0rd"
-$DomainName = "psu.local"
-$DefaultServerOS = "Windows Server 2022 Datacenter Evaluation"
-$DefaultDesktpOS = "Windows 11 Enterprise Evaluation"
-$LabAddressSpace = '172.17.110.0/24'
-$LabRootAddress = ($LabAddressSpace -split '\.0\/\d{0,2}$')
+$labName            = "UniversalLab"
+$InstallUser        = "Administrator"
+$InstallPass        = "L4bP@ssw0rd"
+$DefaultPass        = "L4bP@ssw0rd"
+$DomainName         = "lab.local"
+$DefaultServerOS    = "Windows Server 2022 Datacenter Evaluation"
+$LabAddressSpace    = '172.17.112.0/24'
+$LabRootAddress     = ($LabAddressSpace -split '\.0\/\d{0,2}$')
 $LabInternalVSwitch = 'LabInternalVSwitch'
 $LabExternalVSwitch = 'Default Switch'
 
 # Create the lab definition, set the installation credentials, and add the domain definition.
-New-LabDefinition -Name $labName -DefaultVirtualizationEngine HyperV  -VmPath "C:\AutomatedLab-VMs\$labName"
+New-LabDefinition -Name $labName -DefaultVirtualizationEngine HyperV  -VmPath "C:\AutomatedLab-VMs"
 Set-LabInstallationCredential -Username $InstallUser -Password $InstallPass
 Add-LabDomainDefinition -Name $DomainName -AdminUser $InstallUser -AdminPassword $InstallPass
 
@@ -101,7 +116,7 @@ $machineDefinitions = @(
             RepositoryPath     = 'D:\UniversalAutomation\Repository'
             ServiceAccountName = 'lab\svc-imsrun'
             ServiceAccountPass = $DefaultPass
-            MajorVersion       = 5
+            MajorVersion       = 4
             ComputerName       = 'svr-lab-psu'
         }
     }
@@ -211,6 +226,17 @@ $LabVMs | ForEach-Object {
     # Install RSAT
     Install-LabWindowsFeature -FeatureName RSAT -ComputerName $_ -IncludeAllSubFeature -IncludeManagementTools
 } 
+
+# Retrieve Root CA certificate and place in $labSources\SoftwarePackages
+
+Invoke-LabCommand -ComputerName $RootCA.Name -ActivityName 'Export Root CA Certificate' -ScriptBlock {
+    $cert = Get-ChildItem -Path cert:\localmachine\root | Where-Object { $_.Subject -like '*UniversalLabRootCA*' } | Select-Object -First 1
+    Export-Certificate -Cert $cert -FilePath c:\temp\UniversalLabRootCA.cer -Type CERT
+}
+$RootCaSession = New-LabPSSession $RootCA.name
+Receive-File -SourceFilePath C:\temp\UniversalLabRootCA.cer -DestinationFilePath $labSources\SoftwarePackages\UniversalLabRootCA.cer -Session $RootCaSession
+$RootCaSession = $null
+
 Get-LabVM | Restart-LabVM -Wait
 Install-Lab -PostInstallations 
 Show-LabDeploymentSummary -Detailed
