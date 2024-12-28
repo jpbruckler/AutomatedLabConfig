@@ -75,7 +75,7 @@ if ([string]::IsNullOrEmpty($EmailDomain)) {
     $EmailDomain = $DomainInfo.DnsRoot
 }
 
-$LabRootOU = "OU=Lab,$domainDN"
+$LabRootOU = "OU=$($DomainInfo.DNSRoot),$domainDN"
 $SubOUs = @(
     'Users',
     'ServiceAccounts',

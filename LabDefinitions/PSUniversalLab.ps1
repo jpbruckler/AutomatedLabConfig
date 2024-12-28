@@ -16,6 +16,12 @@
     Default Switch, and to the Lab's internal switch. Lab servers are configured
     to use the PDC as the primary DNS server, with 1.1.1.1 as the secondary.
 #>
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+    <#Category#>'PSAvoidUsingConvertToSecureStringWithPlainText',
+    <#CheckId#>"",
+    Justification = 'Random password generation'
+)]
+param()
 
 $labName            = "UniversalLab"
 $InstallUser        = "Administrator"
@@ -34,23 +40,23 @@ Set-LabInstallationCredential -Username $InstallUser -Password $InstallPass
 Add-LabDomainDefinition -Name $DomainName -AdminUser $InstallUser -AdminPassword $InstallPass
 
 # Define the lab network.
-# - LabInternalVSwitch: Internal virtual switch for the lab network. All lab machines will connect to 
+# - LabInternalVSwitch: Internal virtual switch for the lab network. All lab machines will connect to
 #                       this switch.
 # - Default Switch:     External virtual switch for the lab network. This switch is the default Hyper-V
 #                       switch that connects to the host's network adapter and provides internet access.
 Add-LabVirtualNetworkDefinition -Name $LabInternalVSwitch -AddressSpace $LabAddressSpace -HyperVProperties @{SwitchType = 'Internal' }
-Add-LabVirtualNetworkDefinition -Name $LabExternalVSwitch -HyperVProperties @{SwitchType = 'External'; AdapterName = 'Ethernet' } 
+Add-LabVirtualNetworkDefinition -Name $LabExternalVSwitch -HyperVProperties @{SwitchType = 'External'; AdapterName = 'Ethernet' }
 
 # Setup cmdlet default parameter values to simplify the lab definition.
 $PSDefaultParameterValues = @{
     'Add-LabMachineDefinition:ToolsPath'       = "$labSources\Tools"
     'Add-LabMachineDefinition:DomainName'      = $DomainName
     'Add-LabMachineDefinition:OperatingSystem' = $DefaultServerOS
-    
+
     # Calculate the gateway address based on the lab address space.
     'Add-LabMachineDefinition:Gateway'         = ('{0}.2' -f  $LabRootAddress)
     'Add-LabMachineDefinition:Network'         = $LabInternalVSwitch
-    
+
     # Set the DNS server addresses.
     'Add-LabMachineDefinition:DnsServer1'      = ('{0}.70' -f $LabRootAddress)
     'Add-LabMachineDefinition:DnsServer2'      = '1.1.1.1'
@@ -70,11 +76,12 @@ $PSDefaultParameterValues = @{
 # Each machine definition is passed to the Add-LabMachineDefinition cmdlet via
 # splatting.
 # -----------------------------------------------------------------------------
-Add-LabDiskDefinition -Name psu_datadisk -DiskSizeInGb 100 -Label Apps -DriveLetter D -AllocationUnitSize 64kb
+Add-LabDiskDefinition -Name psu_datadisk01 -DiskSizeInGb 100 -Label Apps -DriveLetter D -AllocationUnitSize 64kb
+Add-LabDiskDefinition -Name psu_datadisk02 -DiskSizeInGb 100 -Label Apps -DriveLetter D -AllocationUnitSize 64kb
 $machineDefinitions = @(
     # DomainName Controller and RootCA
     @{
-        Name      = 'svr-lab-pdc'
+        Name      = 'svr-lab-pdc01'
         IpAddress = ('{0}.70' -f $LabRootAddress)
         Memory    = 1gb
         Roles     = @(
@@ -89,7 +96,7 @@ $machineDefinitions = @(
     },
     # Router
     @{
-        Name           = 'svr-lab-rtr'
+        Name           = 'svr-lab-rtr01'
         Roles          = Get-LabMachineRoleDefinition -Role Routing
         NetworkAdapter = @(
             New-LabNetworkAdapterDefinition -VirtualSwitch $LabInternalVSwitch -Ipv4Address ('{0}.2' -f  $LabRootAddress)
@@ -97,27 +104,42 @@ $machineDefinitions = @(
         )
     },
     @{
-        Name                     = 'svr-lab-wac'
+        Name                     = 'svr-lab-wac01'
         IpAddress                = ('{0}.100' -f $LabRootAddress)
         Processors               = 2
-        PostInstallationActivity = Get-LabPostInstallationActivity -CustomRole WindowsAdminCenter -Properties @{ 
-            ComputerName = 'svr-lab-wac'
+        PostInstallationActivity = Get-LabPostInstallationActivity -CustomRole WindowsAdminCenter -Properties @{
+            ComputerName = 'svr-lab-wac01'
         }
         OperatingSystem          = 'Windows Server 2022 Datacenter Evaluation (Desktop Experience)'
     },
     @{
-        Name                     = 'svr-lab-psu'
+        Name                     = 'svr-lab-psu01'
         IpAddress                = ('{0}.101' -f $LabRootAddress)
         Memory                   = 2gb
         MaxMemory                = 4gb
         Processors               = 2
-        DiskName                 = 'psu_datadisk'
+        DiskName                 = 'psu_datadisk01'
         PostInstallationActivity = Get-LabPostInstallationActivity -CustomRole PowerShellUniversal -Properties @{
             RepositoryPath     = 'D:\UniversalAutomation\Repository'
             ServiceAccountName = 'lab\svc-imsrun'
             ServiceAccountPass = $DefaultPass
             MajorVersion       = 4
-            ComputerName       = 'svr-lab-psu'
+            ComputerName       = 'svr-lab-psu01'
+        }
+    },
+    @{
+        Name                     = 'svr-lab-psu02'
+        IpAddress                = ('{0}.102' -f $LabRootAddress)
+        Memory                   = 2gb
+        MaxMemory                = 4gb
+        Processors               = 2
+        DiskName                 = 'psu_datadisk02'
+        PostInstallationActivity = Get-LabPostInstallationActivity -CustomRole PowerShellUniversal -Properties @{
+            RepositoryPath     = 'D:\UniversalAutomation\Repository'
+            ServiceAccountName = 'lab\svc-imsrun'
+            ServiceAccountPass = $DefaultPass
+            MajorVersion       = 5
+            ComputerName       = 'svr-lab-psu02'
         }
     }
 )
@@ -151,10 +173,10 @@ Invoke-LabCommand -ActivityName 'Publish WebServer Certificate' -ComputerName $R
     dsacls "CN=WebServer,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$DomainName" /G 'DomainName Users:CA;Enroll'
 } -Variable (Get-Variable -Name DomainName)
 
-Invoke-LabCommand -ActivityName 'Create lab OU' -ComputerName $RootDC -ScriptBlock { 
-    $Path = Get-ADDomain | Select-Object -ExpandProperty DistinguishedName
-    if (-not (Get-ADOrganizationalUnit -Filter { Name -eq 'lab' })) {
-        New-ADOrganizationalUnit -Name 'lab' -Path $Path
+Invoke-LabCommand -ActivityName 'Create lab OU' -ComputerName $RootDC -ScriptBlock {
+    $DomainInfo = Get-ADDomain | Select-Object -ExpandProperty DistinguishedName
+    if (-not (Get-ADOrganizationalUnit -Filter { Name -eq $DomainInfo.DNSRoot })) {
+        New-ADOrganizationalUnit -Name 'lab' -Path $DomainInfo.DistinguishedName -ProtectedFromAccidentalDeletion $false
     }
 }
 
@@ -192,14 +214,14 @@ Invoke-LabCommand -ActivityName 'Create lab users' -ComputerName $RootDC -Script
 $LabVMs = Get-LabVM | Select-Object -ExpandProperty Name
 $LabVMs | ForEach-Object {
     # Create temp directory
-    Invoke-LabCommand -ActivityName 'Create C:\Temp' -ComputerName $_ -ScriptBlock { 
+    Invoke-LabCommand -ActivityName 'Create C:\Temp' -ComputerName $_ -ScriptBlock {
         New-Item -ItemType Directory -Path C:\Temp -Force
     }
 
     # Update PowerShell Nuget Provider and Install Carbon module
-    Invoke-LabCommand -ActivityName 'PowerShell 5 Config' -ComputerName $_ -ScriptBlock { 
+    Invoke-LabCommand -ActivityName 'PowerShell 5 Config' -ComputerName $_ -ScriptBlock {
         Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
-        Set-PSRepository -Name PSGallery -InstallationPolicy Trusted 
+        Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
         Install-Module carbon -Force
     }
 
@@ -225,7 +247,7 @@ $LabVMs | ForEach-Object {
 
     # Install RSAT
     Install-LabWindowsFeature -FeatureName RSAT -ComputerName $_ -IncludeAllSubFeature -IncludeManagementTools
-} 
+}
 
 # Retrieve Root CA certificate and place in $labSources\SoftwarePackages
 
@@ -238,5 +260,5 @@ Receive-File -SourceFilePath C:\temp\UniversalLabRootCA.cer -DestinationFilePath
 $RootCaSession = $null
 
 Get-LabVM | Restart-LabVM -Wait
-Install-Lab -PostInstallations 
+Install-Lab -PostInstallations
 Show-LabDeploymentSummary -Detailed
