@@ -1,0 +1,504 @@
+{
+  "Departments": [
+    {
+      "FullName": "Executive",
+      "Name": "EXE",
+      "Titles": [
+        {
+          "title": "CEO",
+          "count": 1,
+          "DirectReports": ["COO", "CFO", "CTO", "CISO"]
+        },
+        {
+          "title": "COO",
+          "count": 1,
+          "DirectReports": [
+            "VP of HR",
+            "VP of Operations",
+            "VP of Logistics",
+            "VP of Quality Assurance",
+            "General Counsel / VP of Legal"
+          ]
+        },
+        {
+          "title": "CFO",
+          "count": 1,
+          "DirectReports": ["VP of Finance", "VP of Sales", "VP of Marketing"]
+        },
+        {
+          "title": "CTO",
+          "count": 1,
+          "DirectReports": ["VP of IT", "VP of R&D", "VP of Customer Support"]
+        },
+        {
+          "title": "CISO",
+          "count": 1,
+          "DirectReports": ["VP of Cybersecurity", "VP of Compliance"]
+        }
+      ]
+    },
+    {
+      "FullName": "Human Resources",
+      "Name": "HR",
+      "Titles": [
+        {
+          "title": "VP of HR",
+          "count": 1,
+          "DirectReports": ["Director of HR"]
+        },
+        {
+          "title": "Director of HR",
+          "count": 1,
+          "DirectReports": ["HR Manager"]
+        },
+        {
+          "title": "HR Manager",
+          "count": 2,
+          "DirectReports": ["HR Generalist", "HR Coordinator", "HR Specialist"]
+        },
+        {
+          "title": "HR Generalist",
+          "count": 3
+        },
+        {
+          "title": "HR Coordinator",
+          "count": 4
+        },
+        {
+          "title": "HR Specialist",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "FullName": "Cybersecurity",
+      "Name": "SEC",
+      "Titles": [
+        {
+          "title": "VP of Cybersecurity",
+          "count": 1,
+          "DirectReports": ["Director of Cybersecurity"]
+        },
+        {
+          "title": "Director of Cybersecurity",
+          "count": 1,
+          "DirectReports": ["Cybersecurity Manager"]
+        },
+        {
+          "title": "Cybersecurity Manager",
+          "count": 2,
+          "DirectReports": [
+            "Senior Security Engineer",
+            "Security Analyst",
+            "Security Specialist"
+          ]
+        },
+        {
+          "title": "Senior Security Engineer",
+          "count": 5
+        },
+        {
+          "title": "Security Analyst",
+          "count": 10
+        },
+        {
+          "title": "Security Specialist",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "FullName": "Finance",
+      "Name": "FIN",
+      "Titles": [
+        {
+          "title": "VP of Finance",
+          "count": 1
+        },
+        {
+          "title": "Director of Finance",
+          "count": 1
+        },
+        {
+          "title": "Finance Manager",
+          "count": 2,
+          "DirectReports": ["Senior Accountant", "Financial Analyst"]
+        },
+        {
+          "title": "Senior Accountant",
+          "count": 5,
+          "DirectReports": ["Staff Accountant", "Financial Analyst"]
+        },
+        {
+          "title": "Staff Accountant",
+          "count": 25
+        },
+        {
+          "title": "Financial Analyst",
+          "count": 50
+        }
+      ]
+    },
+    {
+      "FullName": "Information Technology",
+      "Name": "IT",
+      "Titles": [
+        {
+          "title": "VP of IT",
+          "count": 1,
+          "DirectReports": ["Director of IT"]
+        },
+        {
+          "title": "Director of IT",
+          "count": 1,
+          "DirectReports": ["IT Manager"]
+        },
+        {
+          "title": "IT Manager",
+          "count": 2,
+          "DirectReports": [
+            "Senior Systems Administrator",
+            "Network Engineer",
+            "IT Support Specialist"
+          ]
+        },
+        {
+          "title": "Senior Systems Administrator",
+          "count": 15
+        },
+        {
+          "title": "Network Engineer",
+          "count": 15
+        },
+        {
+          "title": "IT Support Specialist",
+          "count": 50
+        }
+      ]
+    },
+    {
+      "FullName": "Sales",
+      "Name": "SAL",
+      "Titles": [
+        {
+          "title": "VP of Sales",
+          "count": 1,
+          "DirectReports": ["Director of Sales"]
+        },
+        {
+          "title": "Director of Sales",
+          "count": 1,
+          "DirectReports": ["Sales Manager"]
+        },
+        {
+          "title": "Sales Manager",
+          "count": 4,
+          "DirectReports": [
+            "Account Executive",
+            "Sales Representative",
+            "Sales Coordinator"
+          ]
+        },
+        {
+          "title": "Account Executive",
+          "count": 50
+        },
+        {
+          "title": "Sales Representative",
+          "count": 50
+        },
+        {
+          "title": "Sales Coordinator",
+          "count": 50
+        }
+      ]
+    },
+    {
+      "FullName": "Marketing",
+      "Name": "MKT",
+      "Titles": [
+        {
+          "title": "VP of Marketing",
+          "count": 1,
+          "DirectReports": ["Director of Marketing"]
+        },
+        {
+          "title": "Director of Marketing",
+          "count": 1,
+          "DirectReports": ["Marketing Manager"]
+        },
+        {
+          "title": "Marketing Manager",
+          "count": 2,
+          "DirectReports": [
+            "Brand Manager",
+            "Marketing Specialist",
+            "Marketing Coordinator"
+          ]
+        },
+        {
+          "title": "Brand Manager",
+          "count": 5
+        },
+        {
+          "title": "Marketing Specialist",
+          "count": 20
+        },
+        {
+          "title": "Marketing Coordinator",
+          "count": 50
+        }
+      ]
+    },
+    {
+      "FullName": "Research & Development",
+      "Name": "R&D",
+      "Titles": [
+        {
+          "title": "VP of R&D",
+          "count": 1,
+          "DirectReports": ["Director of R&D"]
+        },
+        {
+          "title": "Director of R&D",
+          "count": 1,
+          "DirectReports": ["R&D Manager"]
+        },
+        {
+          "title": "R&D Manager",
+          "count": 2,
+          "DirectReports": [
+            "Lead Research Scientist",
+            "Research Scientist",
+            "R&D Associate"
+          ]
+        },
+        {
+          "title": "Lead Research Scientist",
+          "count": 10
+        },
+        {
+          "title": "Research Scientist",
+          "count": 25
+        },
+        {
+          "title": "R&D Associate",
+          "count": 50
+        }
+      ]
+    },
+    {
+      "FullName": "Customer Support",
+      "Name": "CS",
+      "Titles": [
+        {
+          "title": "VP of Customer Support",
+          "count": 1,
+          "DirectReports": ["Director of Customer Support"]
+        },
+        {
+          "title": "Director of Customer Support",
+          "count": 1,
+          "DirectReports": ["Customer Support Manager"]
+        },
+        {
+          "title": "Customer Support Manager",
+          "count": 2,
+          "DirectReports": [
+            "Customer Support Supervisor",
+            "Customer Support Specialist",
+            "Call Center Agent",
+            "Support Technician"
+          ]
+        },
+        {
+          "title": "Customer Support Specialist",
+          "count": 5
+        },
+        {
+          "title": "Call Center Agent",
+          "count": 50
+        },
+        {
+          "title": "Support Technician",
+          "count": 50
+        }
+      ]
+    },
+    {
+      "FullName": "Operations",
+      "Name": "OPS",
+      "Titles": [
+        {
+          "title": "VP of Operations",
+          "count": 1,
+          "DirectReports": ["Director of Operations"]
+        },
+        {
+          "title": "Director of Operations",
+          "count": 1,
+          "DirectReports": ["Operations Manager"]
+        },
+        {
+          "title": "Operations Manager",
+          "count": 2,
+          "DirectReports": ["Operations Supervisor"]
+        },
+        {
+          "title": "Operations Supervisor",
+          "count": 5,
+          "DirectReports": ["Operations Coordinator", "Operations Associate"]
+        },
+        {
+          "title": "Operations Coordinator",
+          "count": 25
+        },
+        {
+          "title": "Operations Associate",
+          "count": 50
+        }
+      ]
+    },
+    {
+      "FullName": "Logistics",
+      "Name": "LOG",
+      "Titles": [
+        {
+          "title": "VP of Logistics",
+          "count": 1,
+          "DirectReports": ["Director of Logistics"]
+        },
+        {
+          "title": "Director of Logistics",
+          "count": 1,
+          "DirectReports": ["Logistics Manager"]
+        },
+        {
+          "title": "Logistics Manager",
+          "count": 2,
+          "DirectReports": [
+            "Shipping & Receiving Supervisor",
+            "Logistics Coordinator",
+            "Warehouse Associate"
+          ]
+        },
+        {
+          "title": "Shipping & Receiving Supervisor",
+          "count": 5
+        },
+        {
+          "title": "Logistics Coordinator",
+          "count": 25
+        },
+        {
+          "title": "Warehouse Associate",
+          "count": 150
+        }
+      ]
+    },
+    {
+      "FullName": "Quality Assurance",
+      "Name": "QA",
+      "Titles": [
+        {
+          "title": "VP of Quality Assurance",
+          "count": 1,
+          "DirectReports": ["Director of Quality Assurance"]
+        },
+        {
+          "title": "Director of Quality Assurance",
+          "count": 1,
+          "DirectReports": ["QA Manager"]
+        },
+        {
+          "title": "QA Manager",
+          "count": 2,
+          "DirectReports": ["QA Supervisor"]
+        },
+        {
+          "title": "QA Supervisor",
+          "count": 5,
+          "DirectReports": ["QA Engineer", "QA Tester"]
+        },
+        {
+          "title": "QA Engineer",
+          "count": 10
+        },
+        {
+          "title": "QA Tester",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "FullName": "Legal",
+      "Name": "LGL",
+      "Titles": [
+        {
+          "title": "General Counsel / VP of Legal",
+          "count": 1,
+          "DirectReports": ["Director of Legal Affairs"]
+        },
+        {
+          "title": "Director of Legal Affairs",
+          "count": 1,
+          "DirectReports": ["Senior Counsel"]
+        },
+        {
+          "title": "Senior Counsel",
+          "count": 2
+        },
+        {
+          "title": "Legal Counsel",
+          "count": 6,
+          "DirectReports": ["Legal Assistant", "Paralegal"]
+        },
+        {
+          "title": "Legal Assistant",
+          "count": 10
+        },
+        {
+          "title": "Paralegal",
+          "count": 12
+        }
+      ]
+    },
+    {
+      "FullName": "Compliance",
+      "Name": "CPL",
+      "Titles": [
+        {
+          "title": "VP of Compliance",
+          "count": 1,
+          "DirectReports": ["Director of Compliance"]
+        },
+        {
+          "title": "Director of Compliance",
+          "count": 1,
+          "DirectReports": ["Compliance Manager"]
+        },
+        {
+          "title": "Compliance Manager",
+          "count": 2,
+          "DirectReports": [
+            "Compliance Analyst",
+            "Compliance Specialist",
+            "Regulatory Affairs Coordinator"
+          ]
+        },
+        {
+          "title": "Compliance Analyst",
+          "count": 6
+        },
+        {
+          "title": "Compliance Specialist",
+          "count": 10
+        },
+        {
+          "title": "Regulatory Affairs Coordinator",
+          "count": 10
+        }
+      ]
+    }
+  ]
+}
