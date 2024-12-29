@@ -93,6 +93,9 @@ $machineDefinitions = @(
                 ValidityPeriodUnits = '20'
             })
         )
+        PostInstallationActivity = Get-LabPostInstallationActivity -CustomRole PopulateAD -Properties @{
+            EmailDomain = $DomainName
+        }
     },
     # Router
     @{
@@ -174,9 +177,9 @@ Invoke-LabCommand -ActivityName 'Publish WebServer Certificate' -ComputerName $R
 } -Variable (Get-Variable -Name DomainName)
 
 Invoke-LabCommand -ActivityName 'Create lab OU' -ComputerName $RootDC -ScriptBlock {
-    $DomainInfo = Get-ADDomain | Select-Object -ExpandProperty DistinguishedName
-    if (-not (Get-ADOrganizationalUnit -Filter { Name -eq $DomainInfo.DNSRoot })) {
-        New-ADOrganizationalUnit -Name 'lab' -Path $DomainInfo.DistinguishedName -ProtectedFromAccidentalDeletion $false
+    $DomainInfo = Get-ADDomain #| Select-Object -ExpandProperty DistinguishedName
+    if (-not (Get-ADOrganizationalUnit -Filter { Name -eq $($DomainInfo.DNSRoot) })) {
+        New-ADOrganizationalUnit -Name $DomainInfo.DNSRoot.ToString() -Path $DomainInfo.DistinguishedName.ToString() -ProtectedFromAccidentalDeletion $false
     }
 }
 
@@ -260,5 +263,7 @@ Receive-File -SourceFilePath C:\temp\UniversalLabRootCA.cer -DestinationFilePath
 $RootCaSession = $null
 
 Get-LabVM | Restart-LabVM -Wait
+
 Install-Lab -PostInstallations
+
 Show-LabDeploymentSummary -Detailed
