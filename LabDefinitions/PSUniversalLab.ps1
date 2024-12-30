@@ -165,7 +165,7 @@ Enable-LabVMRemoting -All
 
 
 # =============================================================================
-# Software installs
+# Domain and Certificate Setup
 # =============================================================================
 $RootCA = Get-LabVM | Where-Object { $_.Roles.Name -like 'CaRoot' }
 $RootDC = Get-LabVM | Where-Object { $_.Roles.Name -like 'RootDC' }
@@ -176,15 +176,7 @@ Invoke-LabCommand -ActivityName 'Publish WebServer Certificate' -ComputerName $R
     dsacls "CN=WebServer,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$DomainName" /G 'DomainName Users:CA;Enroll'
 } -Variable (Get-Variable -Name DomainName)
 
-Invoke-LabCommand -ActivityName 'Create lab OU' -ComputerName $RootDC -ScriptBlock {
-    $DomainInfo = Get-ADDomain #| Select-Object -ExpandProperty DistinguishedName
-    if (-not (Get-ADOrganizationalUnit -Filter { Name -eq $($DomainInfo.DNSRoot) })) {
-        New-ADOrganizationalUnit -Name $DomainInfo.DNSRoot.ToString() -Path $DomainInfo.DistinguishedName.ToString() -ProtectedFromAccidentalDeletion $false
-    }
-}
-
-Invoke-LabCommand -ActivityName 'Create lab users' -ComputerName $RootDC -ScriptBlock {
-    $labOU = Get-ADOrganizationalUnit -Filter { Name -eq 'lab' }
+Invoke-LabCommand -ActivityName 'Create Lab AD Structure' -ComputerName $RootDC -ScriptBlock {
     $labUsers = @(
         @{
             Name           = 'PSU Service Account'
@@ -206,13 +198,14 @@ Invoke-LabCommand -ActivityName 'Create lab users' -ComputerName $RootDC -Script
             UserPrincipalName = "$($user.SamAccountName)@$DomainName"
             AccountPassword   = (ConvertTo-SecureString $DefaultPass -AsPlainText -Force)
             Enabled           = $true
-            Path              = $labOU.DistinguishedName
         }
         New-ADUser @userProps
     }
-} -Variable (Get-Variable -Name DefaultPass), (Get-Variable -Name DomainName)
+} -Variable (Get-Variable -Name DefaultPass), (Get-Variable -Name DomainName) -PassThru
 
-
+# =============================================================================
+# Software installs
+# =============================================================================
 # Install Software on all machines
 $LabVMs = Get-LabVM | Select-Object -ExpandProperty Name
 $LabVMs | ForEach-Object {

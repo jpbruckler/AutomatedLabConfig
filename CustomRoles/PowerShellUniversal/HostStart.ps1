@@ -8,8 +8,36 @@ param(
     [switch] $Force
 )
 
-. $PSScriptRoot\lib.ps1
+#region functions
+function Get-PSUInstallerInfo {
+    param(
+        [int]$MajorVersion = 4
+    )
 
+    begin {}
+
+    process {
+        $VersionUrl = 'https://imsreleases.blob.core.windows.net/universal/production/v{0}-version.txt' -f $MajorVersion
+
+        try {
+            $LatestVersion = (Invoke-WebRequest $VersionUrl -UseBasicParsing -ErrorAction Stop).Content
+            $MsiFileName = "PowerShellUniversal.$LatestVersion.msi"
+            $InstallerUrl = "https://imsreleases.blob.core.windows.net/universal/production/$LatestVersion/$MsiFileName"
+            $InstallerInfo = @{
+                Version     = $LatestVersion
+                FileName    = $MsiFileName
+                DownloadUrl = $InstallerUrl
+            }
+            return $InstallerInfo
+        }
+        catch {
+            Write-Error "Failed to get installer info. $_"
+        }
+    }
+}
+#endregion
+
+Import-Lab -Name $data.Name -NoValidation -NoDisplay
 $vm = Get-LabVM -ComputerName $ComputerName
 
 $PSUService = Invoke-LabCommand -ComputerName $vm.Name -ActivityName 'Get PSU Service' -ScriptBlock {
@@ -41,8 +69,8 @@ Invoke-LabCommand -ComputerName $vm.Name -ActivityName 'Create Repository Folder
 # Prepare the installation arguments for the PowerShell Universal installer.
 $RepositoryRoot = $RepositoryPath | Split-Path -Parent
 $InstallArgs = @(
-    '/qn', 
-    '/l*v', 
+    '/qn',
+    '/l*v',
     "$SCRIPTTEMPFOLDER\$($psuInfo.FileName)_install.log",
     "REPOFOLDER=$RepositoryPath",
     ('CONNECTIONSTRING="Data Source={0}\database.db"' -f $RepositoryRoot),
