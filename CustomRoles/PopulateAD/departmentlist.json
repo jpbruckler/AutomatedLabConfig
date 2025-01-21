@@ -113,11 +113,13 @@
       "Titles": [
         {
           "title": "VP of Finance",
-          "count": 1
+          "count": 1,
+          "DirectReports": ["Director of Finance"]
         },
         {
           "title": "Director of Finance",
-          "count": 1
+          "count": 1,
+          "DirectReports": ["Finance Manager"]
         },
         {
           "title": "Finance Manager",
@@ -412,21 +414,21 @@
         },
         {
           "title": "QA Manager",
-          "count": 2,
+          "count": 1,
           "DirectReports": ["QA Supervisor"]
         },
         {
           "title": "QA Supervisor",
-          "count": 5,
+          "count": 3,
           "DirectReports": ["QA Engineer", "QA Tester"]
         },
         {
           "title": "QA Engineer",
-          "count": 10
+          "count": 15
         },
         {
           "title": "QA Tester",
-          "count": 10
+          "count": 15
         }
       ]
     },
@@ -442,7 +444,7 @@
         {
           "title": "Director of Legal Affairs",
           "count": 1,
-          "DirectReports": ["Senior Counsel"]
+          "DirectReports": ["Senior Counsel", "Legal Counsel"]
         },
         {
           "title": "Senior Counsel",

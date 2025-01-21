@@ -27,7 +27,7 @@
 #>
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
     <#Category#>'PSAvoidUsingConvertToSecureStringWithPlainText',
-    <#CheckId#>"",
+    <#CheckId#>'',
     Justification = 'Random password generation'
 )]
 param(
@@ -197,6 +197,7 @@ $GroupOUs | ForEach-Object {
 # create the CEO
 $user = $ShuffledNameList[0]
 $office = $OfficeList | Get-Random
+# Create a samAccountName based on the first letter of the last name and the employee number
 $employeeNumber = '000000'
 $samAccountName = '{0}{1}' -f $user.Split(' ')[1].substring(0, 1).ToLower(), $employeeNumber
 $userAccount = @{
@@ -252,7 +253,7 @@ foreach ($dept in $DepartmentList.Departments) {
         foreach ($user in $chosenNames) {
             # Progress bar
             $percent = [int](($userCounter / $totalUsers) * 100)
-            Write-Progress -Activity "Creating Users" -Status "Title: $($title.Title)" -PercentComplete $percent
+            Write-Progress -Activity 'Creating Users' -Status "Title: $($title.Title)" -PercentComplete $percent
 
             # User attributes
             $idx = $ShuffledNameList.IndexOf($user)
@@ -305,29 +306,43 @@ Write-Progress -Activity 'Creating Users' -Status 'User Creation complete.' -Per
 #endregion
 
 #region Create User Hierarchies
-$managers = $DepartmentList.Departments.titles | Where-Object { $_.DirectReports }
-foreach ($manager in $managers) {
-    Write-Information "Assigning direct reports to $($manager.Title)..."
-    if ($manager.count -eq 1) {
-        $managerDN = Get-ADUser -Filter "Title -eq '$($manager.Title)'" | Select-Object -ExpandProperty DistinguishedName
-        foreach ($drt in $manager.DirectReports) {
-            $filter = 'Title -eq "{0}"' -f $drt
-            $drs = Get-ADUser -Filter $filter
-            $drs | ForEach-Object {
-                Set-ADUser -Identity $_.DistinguishedName -Manager $managerDN
-            }
+
+function Add-DirectReport {
+    param(
+        [string]$Title,
+        [string[]]$SubordinateTitles
+    )
+
+    $manager = Get-ADUser -Filter "Title -eq '$Title'"
+    $managerCount = ($manager | Measure-Object).Count
+
+    $subordinates = @()
+
+    foreach ($sub in $SubordinateTitles) {
+        $subordinates += Get-ADUser -Filter "Title -eq '$sub'"
+    }
+
+    if ($managerCount -eq 1) {
+        $managerDN = $manager.DistinguishedName
+        foreach ($sub in $subordinates) {
+            Set-ADUser -Identity $sub.DistinguishedName -Manager $managerDN
         }
     }
     else {
-        # MULTIPLE managers => round-robin
-        $mgrCount = $managerUsers.Count
+        Write-Warning "Round-robin assignment of direct reports to managers"
         $i = 0
-
-        foreach ($drUser in $drList) {
-            $assignedManagerDN = $managerUsers[$i % $mgrCount].DistinguishedName
-            Set-ADUser -Identity $drUser.DistinguishedName -Manager $assignedManagerDN
+        foreach ($sub in $subordinates) {
+            $assignedManagerDN = $manager[$i % $managerCount].DistinguishedName
+            Set-ADUser -Identity $sub.DistinguishedName -Manager $assignedManagerDN
             $i++
         }
+    }
+}
+
+$DepartmentList.Departments.Titles | ForEach-Object {
+    if ($_.DirectReports) {
+        Write-Information "Setting direct reports for title $($_.Title)..." -InformationAction Continue
+        Add-DirectReport -Title $_.Title -SubordinateTitles $_.DirectReports
     }
 }
 #endregion
@@ -342,12 +357,12 @@ $DepartmentList.Departments | ForEach-Object {
     $distGroupPath = "OU=Distribution,OU=Groups,$LabRootOU"
     $members = Get-ADUser -Filter "Department -eq '$($_.FullName)'" | Select-Object -ExpandProperty SamAccountName
     $group = @{
-        Name              = $secGroupName
-        DisplayName       = $secGroupName
-        SamAccountName    = $secGroupName
-        GroupCategory     = 'Security'
-        GroupScope        = 'Global'
-        Path              = $secGroupPath
+        Name           = $secGroupName
+        DisplayName    = $secGroupName
+        SamAccountName = $secGroupName
+        GroupCategory  = 'Security'
+        GroupScope     = 'Global'
+        Path           = $secGroupPath
     }
     try {
         if (-not (Test-ADSIPath "CN=$secGroupName,$secGroupPath")) {
@@ -387,14 +402,14 @@ $DepartmentList.Departments | ForEach-Object {
     }
 }
 
-Write-Information "Creating All Users Security group..."
+Write-Information 'Creating All Users Security group...'
 $allUsersGroup = @{
-    Name              = 'All Users'
-    DisplayName       = 'All Users'
-    SamAccountName    = 'AllUsers'
-    GroupCategory     = 'Security'
-    GroupScope        = 'Global'
-    Path              = "OU=Security,OU=Groups,$LabRootOU"
+    Name           = 'All Users'
+    DisplayName    = 'All Users'
+    SamAccountName = 'AllUsers'
+    GroupCategory  = 'Security'
+    GroupScope     = 'Global'
+    Path           = "OU=Security,OU=Groups,$LabRootOU"
 }
 try {
     if (-not (Test-ADSIPath "CN=All Users,OU=Security,OU=Groups,$LabRootOU")) {
@@ -410,14 +425,14 @@ catch {
     Write-Warning "Error creating group 'All Users' ($($_.Exception.Message))"
 }
 
-Write-Information "Creating Executive Security group..."
+Write-Information 'Creating Executive Security group...'
 $execGroup = @{
-    Name              = 'Executives'
-    DisplayName       = 'Executives'
-    SamAccountName    = 'Executives'
-    GroupCategory     = 'Security'
-    GroupScope        = 'Global'
-    Path              = "OU=Security,OU=Groups,$LabRootOU"
+    Name           = 'Executives'
+    DisplayName    = 'Executives'
+    SamAccountName = 'Executives'
+    GroupCategory  = 'Security'
+    GroupScope     = 'Global'
+    Path           = "OU=Security,OU=Groups,$LabRootOU"
 }
 try {
     if (-not (Test-ADSIPath "CN=Executives,OU=Security,OU=Groups,$LabRootOU")) {

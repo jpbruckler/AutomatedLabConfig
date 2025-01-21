@@ -7,7 +7,7 @@ param(
 )
 
 # Import the lib.ps1 file.
-
+Install-Module -Name Carbon -Force -AllowClobber -Scope Global -ErrorAction SilentlyContinue
 Import-Module Carbon
 $Cert = Get-ChildItem cert:\localmachine\my -ErrorAction SilentlyContinue | Where-Object Subject -Like "CN=$($env:COMPUTERNAME)*" | Select-Object -First 1
 
@@ -69,7 +69,7 @@ if ($PSBoundParameters.ContainsKey('ServiceAccountName')) {
         'SeIncreaseQuotaPrivilege'
     )
 
-    foreach ($Privilege in $Privileges) { 
+    foreach ($Privilege in $Privileges) {
         Grant-CPrivilege -Identity $ServiceAccountName -Privilege $Privilege
     }
 
