@@ -109,7 +109,9 @@ $machineDefinitions = @(
     @{
         Name                     = 'svr-lab-wac01'
         IpAddress                = ('{0}.100' -f $LabRootAddress)
-        Processors               = 2
+        Processors               = 4
+        Memory                   = 2gb
+        MaxMemory                = 4gb
         PostInstallationActivity = Get-LabPostInstallationActivity -CustomRole WindowsAdminCenter -Properties @{
             ComputerName = 'svr-lab-wac01'
         }
@@ -118,33 +120,33 @@ $machineDefinitions = @(
     @{
         Name                     = 'svr-lab-psu01'
         IpAddress                = ('{0}.101' -f $LabRootAddress)
-        Memory                   = 2gb
-        MaxMemory                = 4gb
-        Processors               = 2
+        Memory                   = 4gb
+        MaxMemory                = 8gb
+        Processors               = 4
         DiskName                 = 'psu_datadisk01'
         PostInstallationActivity = Get-LabPostInstallationActivity -CustomRole PowerShellUniversal -Properties @{
             RepositoryPath     = 'D:\UniversalAutomation\Repository'
             ServiceAccountName = 'lab\svc-imsrun'
             ServiceAccountPass = $DefaultPass
-            MajorVersion       = 4
+            MajorVersion       = 5
             ComputerName       = 'svr-lab-psu01'
         }
-    },
-    @{
-        Name                     = 'svr-lab-psu02'
-        IpAddress                = ('{0}.102' -f $LabRootAddress)
-        Memory                   = 2gb
-        MaxMemory                = 4gb
-        Processors               = 2
-        DiskName                 = 'psu_datadisk02'
-        PostInstallationActivity = Get-LabPostInstallationActivity -CustomRole PowerShellUniversal -Properties @{
-            RepositoryPath     = 'D:\UniversalAutomation\Repository'
-            ServiceAccountName = 'lab\svc-imsrun'
-            ServiceAccountPass = $DefaultPass
-            MajorVersion       = 5
-            ComputerName       = 'svr-lab-psu02'
-        }
     }
+    # @{
+    #     Name                     = 'svr-lab-psu02'
+    #     IpAddress                = ('{0}.102' -f $LabRootAddress)
+    #     Memory                   = 2gb
+    #     MaxMemory                = 4gb
+    #     Processors               = 2
+    #     DiskName                 = 'psu_datadisk02'
+    #     PostInstallationActivity = Get-LabPostInstallationActivity -CustomRole PowerShellUniversal -Properties @{
+    #         RepositoryPath     = 'D:\UniversalAutomation\Repository'
+    #         ServiceAccountName = 'lab\svc-imsrun'
+    #         ServiceAccountPass = $DefaultPass
+    #         MajorVersion       = 5
+    #         ComputerName       = 'svr-lab-psu02'
+    #     }
+    # }
 )
 
 foreach ($Definition in $MachineDefinitions) {
@@ -218,10 +220,9 @@ $LabVMs | ForEach-Object {
     Invoke-LabCommand -ActivityName 'PowerShell 5 Config' -ComputerName $_ -ScriptBlock {
         Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
         Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-        Install-Module carbon -Force
+        Install-Module carbon -Force -Scope AllUsers
     }
 
-    # Install Latest PowerShell 7
     $latest = Invoke-RestMethod -Uri 'api.github.com/repos/powershell/powershell/releases/latest'
     $target = $latest.assets | where-object name -like '*win-x64.msi'
     if (-not (Test-Path -Path "$labSources\SoftwarePackages\$($target.name)")) {
@@ -229,6 +230,17 @@ $LabVMs | ForEach-Object {
     }
 
     Install-LabSoftwarePackage -ComputerName $_ -Path "$labSources\SoftwarePackages\$($target.name)" -CommandLine '/qn /l*v C:\temp\Pwsh_install.log ADD_EXPLORER_CONTEXT_MENU_OPENPOWERSHELL=1 ADD_FILE_CONTEXT_MENU_RUNPOWERSHELL=1 ENABLE_PSREMOTING=1 REGISTER_MANIFEST=1 USE_MU=1 ENABLE_MU=1 ADD_PATH=1'
+
+    # Install Scoop
+    Invoke-LabCommand -ActivityName 'Install Scoop' -ComputerName $_ -ScriptBlock {
+        iex "& {$(irm get.scoop.sh)} -RunAsAdmin"
+    }
+
+    # Install PowerShell 7 via Scoop
+    Invoke-LabCommand -ActivityName 'Install Git and Neovim' -ComputerName $_ -ScriptBlock {
+        scoop install neovim
+        scoop install git
+    }
 
     # Add web server certificate
     $cert = Get-LabCertificate -Computer $_ -SearchString $_ -FindType FindBySubjectName -Location CERT_SYSTEM_STORE_LOCAL_MACHINE -Store My

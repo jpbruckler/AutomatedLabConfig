@@ -7,7 +7,7 @@ param(
 )
 
 # Import the lib.ps1 file.
-Install-Module -Name Carbon -Force -AllowClobber -Scope Global -ErrorAction SilentlyContinue
+Install-Module -Name Carbon -Force -AllowClobber -Scope AllUsers -ErrorAction SilentlyContinue
 Import-Module Carbon
 $Cert = Get-ChildItem cert:\localmachine\my -ErrorAction SilentlyContinue | Where-Object Subject -Like "CN=$($env:COMPUTERNAME)*" | Select-Object -First 1
 
