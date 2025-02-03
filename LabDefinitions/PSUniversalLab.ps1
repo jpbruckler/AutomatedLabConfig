@@ -18,24 +18,24 @@
 #>
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
     <#Category#>'PSAvoidUsingConvertToSecureStringWithPlainText',
-    <#CheckId#>"",
+    <#CheckId#>'',
     Justification = 'Random password generation'
 )]
 param()
 
-$labName            = "UniversalLab"
-$InstallUser        = "Administrator"
-$InstallPass        = "L4bP@ssw0rd"
-$DefaultPass        = "L4bP@ssw0rd"
-$DomainName         = "lab.local"
-$DefaultServerOS    = "Windows Server 2022 Datacenter Evaluation"
-$LabAddressSpace    = '172.17.112.0/24'
-$LabRootAddress     = ($LabAddressSpace -split '\.0\/\d{0,2}$')
+$labName = 'UniversalLab'
+$InstallUser = 'Administrator'
+$InstallPass = 'L4bP@ssw0rd'
+$DefaultPass = 'L4bP@ssw0rd'
+$DomainName = 'lab.local'
+$DefaultServerOS = 'Windows Server 2022 Datacenter Evaluation'
+$LabAddressSpace = '172.17.112.0/24'
+$LabRootAddress = ($LabAddressSpace -split '\.0\/\d{0,2}$')
 $LabInternalVSwitch = 'LabInternalVSwitch'
 $LabExternalVSwitch = 'Default Switch'
 
 # Create the lab definition, set the installation credentials, and add the domain definition.
-New-LabDefinition -Name $labName -DefaultVirtualizationEngine HyperV  -VmPath "C:\AutomatedLab-VMs"
+New-LabDefinition -Name $labName -DefaultVirtualizationEngine HyperV  -VmPath 'C:\AutomatedLab-VMs'
 Set-LabInstallationCredential -Username $InstallUser -Password $InstallPass
 Add-LabDomainDefinition -Name $DomainName -AdminUser $InstallUser -AdminPassword $InstallPass
 
@@ -54,7 +54,7 @@ $PSDefaultParameterValues = @{
     'Add-LabMachineDefinition:OperatingSystem' = $DefaultServerOS
 
     # Calculate the gateway address based on the lab address space.
-    'Add-LabMachineDefinition:Gateway'         = ('{0}.2' -f  $LabRootAddress)
+    'Add-LabMachineDefinition:Gateway'         = ('{0}.2' -f $LabRootAddress)
     'Add-LabMachineDefinition:Network'         = $LabInternalVSwitch
 
     # Set the DNS server addresses.
@@ -81,10 +81,10 @@ Add-LabDiskDefinition -Name psu_datadisk02 -DiskSizeInGb 100 -Label Apps -DriveL
 $machineDefinitions = @(
     # DomainName Controller and RootCA
     @{
-        Name      = 'svr-lab-pdc01'
-        IpAddress = ('{0}.70' -f $LabRootAddress)
-        Memory    = 1gb
-        Roles     = @(
+        Name                     = 'svr-lab-pdc01'
+        IpAddress                = ('{0}.70' -f $LabRootAddress)
+        Memory                   = 1gb
+        Roles                    = @(
             (Get-LabMachineRoleDefinition -Role RootDC),
             (Get-LabMachineRoleDefinition -Role CaRoot -Properties @{
                 CACommonName        = 'UniversalLabRootCA'
@@ -102,7 +102,7 @@ $machineDefinitions = @(
         Name           = 'svr-lab-rtr01'
         Roles          = Get-LabMachineRoleDefinition -Role Routing
         NetworkAdapter = @(
-            New-LabNetworkAdapterDefinition -VirtualSwitch $LabInternalVSwitch -Ipv4Address ('{0}.2' -f  $LabRootAddress)
+            New-LabNetworkAdapterDefinition -VirtualSwitch $LabInternalVSwitch -Ipv4Address ('{0}.2' -f $LabRootAddress)
             New-LabNetworkAdapterDefinition -VirtualSwitch $LabExternalVSwitch -UseDhcp
         )
     },
@@ -224,7 +224,7 @@ $LabVMs | ForEach-Object {
     }
 
     $latest = Invoke-RestMethod -Uri 'api.github.com/repos/powershell/powershell/releases/latest'
-    $target = $latest.assets | where-object name -like '*win-x64.msi'
+    $target = $latest.assets | Where-Object name -Like '*win-x64.msi'
     if (-not (Test-Path -Path "$labSources\SoftwarePackages\$($target.name)")) {
         Invoke-WebRequest -Uri $target.browser_download_url -OutFile "$labSources\SoftwarePackages\$($target.name)"
     }
@@ -233,14 +233,49 @@ $LabVMs | ForEach-Object {
 
     # Install Scoop
     Invoke-LabCommand -ActivityName 'Install Scoop' -ComputerName $_ -ScriptBlock {
-        iex "& {$(irm get.scoop.sh)} -RunAsAdmin"
+        Invoke-Expression "& {$(Invoke-RestMethod get.scoop.sh)} -RunAsAdmin"
     }
 
-    # Install PowerShell 7 via Scoop
-    Invoke-LabCommand -ActivityName 'Install Git and Neovim' -ComputerName $_ -ScriptBlock {
-        scoop install neovim
-        scoop install git
+    if ($_ -in ('svr-lab-psu01', 'svr-lab-wac01')) {
+        # Scoop install some things
+        Invoke-LabCommand -ActivityName 'Install Git and Neovim' -ComputerName $_ -ScriptBlock {
+            scoop install neovim
+            scoop install git
+            scoop bucket add extras
+            scoop install extras/vcredist2022
+        }
+
+        # Update Pester
+        Invoke-LabCommand -ActivityName 'Update Pester' -ComputerName $_ -ScriptBlock {
+            $module = 'C:\Program Files\WindowsPowerShell\Modules\Pester'
+            & takeown.exe /F $module /A /R
+            & icacls.exe $module /reset
+            & icacls.exe $module /grant '*S-1-5-32-544:F' /inheritance:d /T
+            Remove-Item -Path $module -Recurse -Force -Confirm:$false
+
+            # Install latest Pester
+            Install-Module -Name Pester -Scope AllUsers -Force
+        }
     }
+
+    if ($_ -eq 'svr-lab-psu01') {
+        # Enable OpenSSH
+        Invoke-LabCommand -ActivityName 'Enable OpenSSH' -ComputerName $_ -ScriptBlock {
+            # Add capability, start service, and set to automatic startup
+            Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+            Start-Service sshd
+            Set-Service -Name sshd -StartupType 'Automatic'
+
+            # Set firewall rules
+            if (!(Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue | Select-Object Name, Enabled)) {
+                Write-Output "Firewall Rule 'OpenSSH-Server-In-TCP' does not exist, creating it..."
+                New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
+            } else {
+                Write-Output "Firewall rule 'OpenSSH-Server-In-TCP' has been created and exists."
+            }
+        }
+    }
+
 
     # Add web server certificate
     $cert = Get-LabCertificate -Computer $_ -SearchString $_ -FindType FindBySubjectName -Location CERT_SYSTEM_STORE_LOCAL_MACHINE -Store My
