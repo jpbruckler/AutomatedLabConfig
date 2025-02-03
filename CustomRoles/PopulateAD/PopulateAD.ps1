@@ -194,6 +194,8 @@ $GroupOUs | ForEach-Object {
 #endregion
 
 #region Create Users
+# reset the OU Path
+$ouPath = "OU=Users,$LabRootOU"
 # create the CEO
 $user = $ShuffledNameList[0]
 $office = $OfficeList | Get-Random
@@ -218,6 +220,7 @@ $userAccount = @{
     Office            = $office.BranchOffice
     Path              = $ouPath
     Enabled           = $true
+    EmployeeID        = $employeeNumber
     AccountPassword   = Get-TempPassword -sourcedata $ascii
 }
 # Create the CEO
@@ -279,6 +282,7 @@ foreach ($dept in $DepartmentList.Departments) {
                 Office            = $office.BranchOffice
                 Path              = $ouPath
                 Enabled           = $true
+                EmployeeID        = $employeeNumber
                 AccountPassword   = Get-TempPassword -sourcedata $ascii
             }
 
@@ -290,6 +294,12 @@ foreach ($dept in $DepartmentList.Departments) {
             catch {
                 try {
                     New-ADUser @userAccount -ErrorAction Stop
+                    # Randomly add ProxyAddresses
+                    if (((Get-Random) % 2) -eq 0) {
+                        Write-Information "Adding ProxyAddresses for $samAccountName"
+                        $ProxyAddresses = @("SMTP:$($user.Replace(' ', '.'))@$EmailDomain", "smtp:$($samAccountName)@$EmailDomain")
+                        Set-ADUser -Identity $samAccountName -Add @{ ProxyAddresses = $ProxyAddresses }
+                    }
                 }
                 catch {
                     Write-Warning "User $samAccountName already exists. Skipping."
@@ -329,7 +339,7 @@ function Add-DirectReport {
         }
     }
     else {
-        Write-Warning "Round-robin assignment of direct reports to managers"
+        Write-Warning 'Round-robin assignment of direct reports to managers'
         $i = 0
         foreach ($sub in $subordinates) {
             $assignedManagerDN = $manager[$i % $managerCount].DistinguishedName
