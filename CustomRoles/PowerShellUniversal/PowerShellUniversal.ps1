@@ -79,3 +79,5 @@ if ($PSBoundParameters.ContainsKey('ServiceAccountName')) {
 }
 
 Start-Service -Name 'PowerShellUniversal' -ErrorAction SilentlyContinue
+$null = New-Item (Join-Path $RepositoryPath 'Modules') -ItemType Directory
+New-SmbShare -Name 'Modules' -Path (Join-Path $RepositoryPath 'Modules') -FullAccess Everyone

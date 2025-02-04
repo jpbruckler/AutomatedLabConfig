@@ -23,14 +23,14 @@
 )]
 param()
 
-$labName = 'UniversalLab'
-$InstallUser = 'Administrator'
-$InstallPass = 'L4bP@ssw0rd'
-$DefaultPass = 'L4bP@ssw0rd'
-$DomainName = 'lab.local'
-$DefaultServerOS = 'Windows Server 2022 Datacenter Evaluation'
-$LabAddressSpace = '172.17.112.0/24'
-$LabRootAddress = ($LabAddressSpace -split '\.0\/\d{0,2}$')
+$labName            = "UniversalLab"
+$InstallUser        = "Administrator"
+$InstallPass        = "L4bP@ssw0rd"
+$DefaultPass        = "L4bP@ssw0rd"
+$DomainName         = "lab.local"
+$DefaultServerOS    = "Windows Server 2022 Datacenter"
+$LabAddressSpace    = '172.17.112.0/24'
+$LabRootAddress     = ($LabAddressSpace -split '\.0\/\d{0,2}$')
 $LabInternalVSwitch = 'LabInternalVSwitch'
 $LabExternalVSwitch = 'Default Switch'
 
@@ -115,7 +115,7 @@ $machineDefinitions = @(
         PostInstallationActivity = Get-LabPostInstallationActivity -CustomRole WindowsAdminCenter -Properties @{
             ComputerName = 'svr-lab-wac01'
         }
-        OperatingSystem          = 'Windows Server 2022 Datacenter Evaluation (Desktop Experience)'
+        OperatingSystem          = 'Windows Server 2022 Datacenter (Desktop Experience)'
     },
     @{
         Name                     = 'svr-lab-psu01'
@@ -258,24 +258,9 @@ $LabVMs | ForEach-Object {
         }
     }
 
-    if ($_ -eq 'svr-lab-psu01') {
-        # Enable OpenSSH
-        Invoke-LabCommand -ActivityName 'Enable OpenSSH' -ComputerName $_ -ScriptBlock {
-            # Add capability, start service, and set to automatic startup
-            Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
-            Start-Service sshd
-            Set-Service -Name sshd -StartupType 'Automatic'
-
-            # Set firewall rules
-            if (!(Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue | Select-Object Name, Enabled)) {
-                Write-Output "Firewall Rule 'OpenSSH-Server-In-TCP' does not exist, creating it..."
-                New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
-            } else {
-                Write-Output "Firewall rule 'OpenSSH-Server-In-TCP' has been created and exists."
-            }
-        }
+    Invoke-LabCommand -ActivityName 'Enable PowerShell 7 WinRM' -ComputerName $_ -ScriptBlock {
+        Start-Process pwsh -ArgumentList '-Command &{ Enable-PSRemoting -Force }'
     }
-
 
     # Add web server certificate
     $cert = Get-LabCertificate -Computer $_ -SearchString $_ -FindType FindBySubjectName -Location CERT_SYSTEM_STORE_LOCAL_MACHINE -Store My
@@ -306,4 +291,4 @@ Get-LabVM | Restart-LabVM -Wait
 
 Install-Lab -PostInstallations
 
-Show-LabDeploymentSummary -Detailed
+Show-LabDeploymentSummary
