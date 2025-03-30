@@ -4,8 +4,7 @@ param(
     [string] $LabSourcesPath
 )
 
-if (-not (Test-Path $LabSourcesPath))
-{
+if (-not (Test-Path $LabSourcesPath)) {
     Write-Error "LabSourcesPath does not exist: $LabSourcesPath"
     exit 1
 }

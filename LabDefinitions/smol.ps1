@@ -2,7 +2,7 @@ $LabName            = 'smol'
 $DomainName         = 'smol.lab'
 $InstallUser        = "Administrator"
 $DefaultPass        = "L4bP@ssw0rd"
-$LabAddressSpace    = '192.168.110.0/24'
+$LabAddressSpace    = '172.17.112.0/24'
 $LabRootAddress     = ($LabAddressSpace -split '\.0\/\d{0,2}$')
 $LabInternalVSwitch = 'LabInternalVSwitch'
 $LabExternalVSwitch = 'Default Switch'
@@ -63,7 +63,7 @@ $Psu = @{
         ServiceAccountName = 'lab\svc-imsrun'
         ServiceAccountPass = $DefaultPass
         MajorVersion       = 5
-        ComputerName       = 'svr-lab-psu01'
+        ComputerName       = 'svr-lab-psu'
     }
 }
 Add-LabMachineDefinition @Dc
